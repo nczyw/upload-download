@@ -1,0 +1,117 @@
+use serde::Serialize;
+
+#[derive(Serialize)]
+pub struct Trans {
+    pub lang: &'static str,
+    pub app_title: &'static str,
+    pub upload: &'static str,
+    pub download: &'static str,
+    pub delete: &'static str,
+    pub file_name: &'static str,
+    pub file_size: &'static str,
+    pub modified: &'static str,
+    pub no_files: &'static str,
+    pub drag_drop: &'static str,
+    pub select_file: &'static str,
+    pub password: &'static str,
+    pub enter_password: &'static str,
+    pub cancel: &'static str,
+    pub confirm: &'static str,
+    pub download_title: &'static str,
+    pub delete_title: &'static str,
+    pub delete_confirm: &'static str,
+    pub success: &'static str,
+    pub error: &'static str,
+    pub invalid_password: &'static str,
+    pub file_deleted: &'static str,
+    pub upload_success: &'static str,
+    pub language: &'static str,
+    pub delete_password: &'static str,
+    pub dynamic_password_desc: &'static str,
+    pub downloading: &'static str,
+    pub close: &'static str,
+    pub total_files: &'static str,
+    pub too_many_attempts: &'static str,
+    pub files: &'static str,
+}
+
+pub fn get(lang: &str) -> Trans {
+    match lang {
+        "zh" => Trans {
+            lang: "zh",
+            app_title: "文件上传下载",
+            upload: "上传",
+            download: "下载",
+            delete: "删除",
+            file_name: "文件名",
+            file_size: "大小",
+            modified: "修改时间",
+            no_files: "暂无文件",
+            drag_drop: "拖拽文件到此处，或点击选择",
+            select_file: "选择文件",
+            password: "密码",
+            enter_password: "请输入密码",
+            cancel: "取消",
+            confirm: "确认",
+            download_title: "下载文件",
+            delete_title: "删除文件",
+            delete_confirm: "确认删除",
+            success: "成功",
+            error: "错误",
+            invalid_password: "密码错误",
+            file_deleted: "文件已删除",
+            upload_success: "上传成功",
+            language: "English",
+            delete_password: "删除密码",
+            dynamic_password_desc: "请输入动态密码",
+            downloading: "下载中...",
+            close: "关闭",
+            total_files: "共 {n} 个文件",
+            too_many_attempts: "密码错误次数过多，请等待10分钟",
+            files: "文件列表",
+        },
+        _ => Trans {
+            lang: "en",
+            app_title: "File Upload & Download",
+            upload: "Upload",
+            download: "Download",
+            delete: "Delete",
+            file_name: "File Name",
+            file_size: "Size",
+            modified: "Modified",
+            no_files: "No files",
+            drag_drop: "Drag & drop files here, or click to select",
+            select_file: "Select File",
+            password: "Password",
+            enter_password: "Enter password",
+            cancel: "Cancel",
+            confirm: "Confirm",
+            download_title: "Download File",
+            delete_title: "Delete File",
+            delete_confirm: "Confirm Delete",
+            success: "Success",
+            error: "Error",
+            invalid_password: "Invalid password",
+            file_deleted: "File deleted",
+            upload_success: "Upload successful",
+            language: "中文",
+            delete_password: "Delete Password",
+            dynamic_password_desc: "Enter dynamic password",
+            downloading: "Downloading...",
+            close: "Close",
+            total_files: "{n} file(s)",
+            too_many_attempts: "Too many failed attempts, please wait 10 minutes",
+            files: "Files",
+        },
+    }
+}
+
+pub fn detect(accept_language: &str) -> String {
+    for part in accept_language.split(',') {
+        let lang = part.trim().split(';').next().unwrap_or("").split('-').next().unwrap_or("");
+        if lang == "zh" {
+            return "zh".to_string();
+        }
+    }
+    "en".to_string()
+}
