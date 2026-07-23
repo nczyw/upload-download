@@ -9,6 +9,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Instant;
 
+#[derive(Clone)]
+pub struct DeletePassword(pub String);
+
+#[derive(Clone)]
+pub struct Salt(pub String);
+
 const HTML_TEMPLATE: &str = include_str!("../static/index.html");
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
@@ -23,6 +29,12 @@ struct FileInfo {
     name: String,
     size: u64,
     modified: String,
+}
+
+#[derive(Serialize)]
+struct UploadResult {
+    original: String,
+    saved_as: String,
 }
 
 #[derive(Serialize)]
@@ -112,6 +124,29 @@ impl RateLimiter {
     }
 }
 
+fn find_available_path(dir: &Path, filename: &str) -> PathBuf {
+    let filepath = dir.join(filename);
+    if !filepath.exists() {
+        return filepath;
+    }
+
+    let stem = Path::new(filename).file_stem().unwrap_or_default().to_string_lossy();
+    let ext = Path::new(filename).extension().unwrap_or_default().to_string_lossy();
+    
+    for i in 2.. {
+        let new_name = if ext.is_empty() {
+            format!("{}-{}", stem, i)
+        } else {
+            format!("{}-{}.{}", stem, i, ext)
+        };
+        let new_path = dir.join(&new_name);
+        if !new_path.exists() {
+            return new_path;
+        }
+    }
+    dir.join(filename)
+}
+
 // ============ Handlers ============
 
 pub async fn index() -> HttpResponse {
@@ -173,6 +208,8 @@ pub async fn upload(mut payload: Multipart, req: HttpRequest) -> HttpResponse {
         }
     }
 
+    let mut uploaded_files = Vec::new();
+
     while let Some(field) = payload.next().await {
         let mut field = match field {
             Ok(f) => f,
@@ -190,11 +227,13 @@ pub async fn upload(mut payload: Multipart, req: HttpRequest) -> HttpResponse {
             .replace('/', "_")
             .replace('\\', "_");
 
-        let filepath = dir.join(&filename);
+        let filepath = find_available_path(dir, &filename);
+        let final_filename = filepath.file_name().unwrap().to_string_lossy().to_string();
+
         let mut f = match fs::File::create(&filepath).await {
             Ok(f) => f,
             Err(e) => {
-                error!("Failed to create file {}: {}", filename, e);
+                error!("Failed to create file {}: {}", final_filename, e);
                 return err_msg(e.to_string());
             }
         };
@@ -203,21 +242,25 @@ pub async fn upload(mut payload: Multipart, req: HttpRequest) -> HttpResponse {
             match chunk {
                 Ok(bytes) => {
                     if let Err(e) = f.write_all(&bytes).await {
-                        error!("Failed to write file {}: {}", filename, e);
+                        error!("Failed to write file {}: {}", final_filename, e);
                         return err_msg(e.to_string());
                     }
                 }
                 Err(e) => {
-                    error!("Stream error for {}: {}", filename, e);
+                    error!("Stream error for {}: {}", final_filename, e);
                     return err_msg(e.to_string());
                 }
             }
         }
 
-        info!("File uploaded: {} ({})", filename, filepath.display());
+        uploaded_files.push(UploadResult {
+            original: filename,
+            saved_as: final_filename.clone(),
+        });
+        info!("File uploaded: {} ({})", final_filename, filepath.display());
     }
 
-    ok_msg(t.upload_success.to_string(), None::<()>)
+    ok_msg(t.upload_success.to_string(), Some(uploaded_files))
 }
 
 pub async fn download(
@@ -225,6 +268,7 @@ pub async fn download(
     path: web::Path<String>,
     query: web::Query<PasswordQuery>,
     limiter: web::Data<RateLimiter>,
+    salt: web::Data<Salt>,
 ) -> HttpResponse {
     let lang = lang_from_req(&req);
     let t = i18n::get(&lang);
@@ -241,7 +285,7 @@ pub async fn download(
         return err_msg(t.too_many_attempts.to_string());
     }
 
-    if !password::verify(&query.password) {
+    if !password::verify(&query.password, &salt.0) {
         limiter.record_failure(&ip_key);
         return err_msg(t.invalid_password.to_string());
     }
@@ -270,8 +314,8 @@ pub async fn download(
 pub async fn delete_file(
     req: HttpRequest,
     path: web::Path<String>,
-    query: web::Query<PasswordQuery>,
-    delete_password: web::Data<String>,
+    body: web::Json<PasswordBody>,
+    delete_password: web::Data<DeletePassword>,
     limiter: web::Data<RateLimiter>,
 ) -> HttpResponse {
     let lang = lang_from_req(&req);
@@ -284,7 +328,7 @@ pub async fn delete_file(
         return err_msg(t.too_many_attempts.to_string());
     }
 
-    if query.password != **delete_password {
+    if body.password != delete_password.0 {
         limiter.record_failure(&ip_key);
         return err_msg(t.invalid_password.to_string());
     }
@@ -311,6 +355,7 @@ pub async fn verify_password(
     req: HttpRequest,
     body: web::Json<PasswordBody>,
     limiter: web::Data<RateLimiter>,
+    salt: web::Data<Salt>,
 ) -> HttpResponse {
     let lang = lang_from_req(&req);
     let t = i18n::get(&lang);
@@ -321,13 +366,38 @@ pub async fn verify_password(
         return err_msg(t.too_many_attempts.to_string());
     }
 
-    if password::verify(&body.password) {
+    if password::verify(&body.password, &salt.0) {
         limiter.reset(&ip_key);
         return ok_msg(String::new(), None::<()>);
     } else {
         limiter.record_failure(&ip_key);
         return err_msg(t.invalid_password.to_string());
     }
+}
+
+pub async fn get_salt(
+    req: HttpRequest,
+    body: web::Json<PasswordBody>,
+    salt: web::Data<Salt>,
+    delete_password: web::Data<DeletePassword>,
+    limiter: web::Data<RateLimiter>,
+) -> HttpResponse {
+    let lang = lang_from_req(&req);
+    let t = i18n::get(&lang);
+    let ip_key = client_ip(&req).to_string();
+
+    if let Err(_) = limiter.check(&ip_key) {
+        warn!("Rate limit hit for get_salt: {}", ip_key);
+        return err_msg(t.too_many_attempts.to_string());
+    }
+
+    if body.password != delete_password.0 {
+        limiter.record_failure(&ip_key);
+        return err_msg(t.invalid_password.to_string());
+    }
+
+    limiter.reset(&ip_key);
+    ok_msg(String::new(), Some(salt.0.clone()))
 }
 
 pub async fn get_translations(req: HttpRequest) -> HttpResponse {

@@ -33,6 +33,13 @@ pub struct Trans {
     pub total_files: &'static str,
     pub too_many_attempts: &'static str,
     pub files: &'static str,
+    pub renamed: &'static str,
+    pub show_salt: &'static str,
+    pub salt: &'static str,
+    pub salt_desc: &'static str,
+    pub copy: &'static str,
+    pub copied: &'static str,
+    pub copy_error: &'static str,
 }
 
 pub fn get(lang: &str) -> Trans {
@@ -69,6 +76,13 @@ pub fn get(lang: &str) -> Trans {
             total_files: "共 {n} 个文件",
             too_many_attempts: "密码错误次数过多，请等待10分钟",
             files: "文件列表",
+            renamed: "已重命名",
+            show_salt: "显示Salt",
+            salt: "Salt",
+            salt_desc: "请输入密码以查看当前Salt",
+            copy: "复制到剪贴板",
+            copied: "已复制",
+            copy_error: "复制失败",
         },
         _ => Trans {
             lang: "en",
@@ -102,6 +116,13 @@ pub fn get(lang: &str) -> Trans {
             total_files: "{n} file(s)",
             too_many_attempts: "Too many failed attempts, please wait 10 minutes",
             files: "Files",
+            renamed: "Renamed",
+            show_salt: "Show Salt",
+            salt: "Salt",
+            salt_desc: "Enter password to view current Salt",
+            copy: "Copy to clipboard",
+            copied: "Copied!",
+            copy_error: "Copy failed",
         },
     }
 }

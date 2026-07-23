@@ -1,6 +1,6 @@
 [package]
 name = "upload-download"
-version = "0.1.1"
+version = "0.1.0"
 edition = "2024"
 authors = ["Rayyi-Tech"]
 
@@ -18,3 +18,5 @@ tokio = { version = "1.53", features = ["full"] }
 mime_guess = "2.0"
 env_logger = "0.11"
 log = "0.4"
+rand = "0.8"
+toml = "0.8"

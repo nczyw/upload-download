@@ -4,8 +4,13 @@
 SERVICE_NAME="upload-download"
 EXEC_PATH="/etc/upload-download/upload-download-linux-x86_64"
 DESCRIPTION="File Upload & Download Service"
+# Runtime arguments - add any arguments you want here
+EXEC_ARGS=""
+
 WORKING_DIRECTORY=$(dirname "$EXEC_PATH")
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+
+
 
 # Check if the executable file exists
 if [ ! -f "$EXEC_PATH" ]; then
@@ -26,7 +31,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=$EXEC_PATH --password YOUR_PASSWORD_HERE
+ExecStart=$EXEC_PATH $EXEC_ARGS
 Restart=on-failure
 WorkingDirectory=$WORKING_DIRECTORY
 

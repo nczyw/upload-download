@@ -25,14 +25,10 @@ fn hour_seed(offset: i64) -> String {
     (Utc::now() + Duration::hours(offset)).format("%Y%m%d%H").to_string()
 }
 
-/// Salt is the crate name (e.g. "upload-download"), automatically read from Cargo.toml
-const SALT: &str = env!("CARGO_PKG_NAME");
-
-/// Verify using the crate name as salt (auto-detected)
-pub fn verify(input: &str) -> bool {
+pub fn verify(input: &str, salt: &str) -> bool {
     for offset in &[0, -1] {
         let seed = hour_seed(*offset);
-        if input == calculate(&seed, SALT) {
+        if input == calculate(&seed, salt) {
             return true;
         }
     }

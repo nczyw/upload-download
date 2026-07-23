@@ -99,6 +99,22 @@
   .modal-btn-primary { background: linear-gradient(90deg, #667eea, #764ba2); color: white; }
   .modal-btn-secondary { background: rgba(255,255,255,0.1); color: #e0e0e0; }
   .modal-btn-danger { background: #ef4444; color: white; }
+  .salt-display {
+    display: none;
+    padding: 16px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 14px;
+    word-break: break-all;
+    text-align: center;
+    margin-bottom: 12px;
+  }
+  .copy-btn {
+    width: 100%;
+    margin-top: 8px;
+  }
   .toast {
     position: fixed; bottom: 30px; right: 30px; padding: 16px 24px;
     border-radius: 12px; color: white; font-size: 14px; font-weight: 500;
@@ -133,6 +149,7 @@
   <header>
     <h1 id="appTitle">File Upload & Download</h1>
     <div class="header-actions">
+      <button class="lang-btn" id="saltBtn" onclick="openModal('salt', '')">显示Salt</button>
       <button class="lang-btn" id="langBtn" onclick="toggleLang()">中文</button>
     </div>
   </header>
@@ -170,6 +187,8 @@
     <p id="modalDesc">Enter dynamic password</p>
     <p class="modal-error" id="modalError"></p>
     <input type="password" class="modal-input" id="modalInput" placeholder="Enter password" autocomplete="off" onkeydown="if(event.key==='Enter')modalConfirm();if(event.key==='Escape')closeModal();">
+    <div id="saltDisplay" class="salt-display"></div>
+    <button class="modal-btn modal-btn-primary copy-btn" id="copySaltBtn" style="display:none;">Copy</button>
     <div class="modal-actions">
       <button class="modal-btn modal-btn-secondary" id="modalCancel" onclick="closeModal()">Cancel</button>
       <button class="modal-btn modal-btn-primary" id="modalConfirm" onclick="modalConfirm()" onkeydown="if(event.key==='Escape')closeModal()">Confirm</button>
@@ -219,6 +238,7 @@ function updateUI() {
   setText('modalCancel', T.cancel);
   setText('modalConfirm', T.confirm);
   setText('langBtn', T.language);
+  setText('saltBtn', T.show_salt);
   setText('emptyText', T.no_files);
   document.title = T.app_title || '';
   updateFileList();
@@ -239,10 +259,18 @@ function openModal(action, file) {
   const desc = document.getElementById('modalDesc');
   const input = document.getElementById('modalInput');
   const confirmBtn = document.getElementById('modalConfirm');
+  const cancelBtn = document.getElementById('modalCancel');
   const errEl = document.getElementById('modalError');
+  const saltDisplay = document.getElementById('saltDisplay');
+  const copyBtn = document.getElementById('copySaltBtn');
 
   errEl.classList.remove('show');
   errEl.textContent = '';
+  if (saltDisplay) saltDisplay.style.display = 'none';
+  if (copyBtn) copyBtn.style.display = 'none';
+  if (input) input.style.display = 'block';
+  if (confirmBtn) confirmBtn.style.display = 'block';
+  if (cancelBtn) cancelBtn.style.display = 'block';
 
   if (action === 'download') {
     title.textContent = T.download_title;
@@ -250,12 +278,24 @@ function openModal(action, file) {
     confirmBtn.textContent = T.download;
     confirmBtn.className = 'modal-btn modal-btn-primary';
     input.placeholder = T.enter_password;
-  } else {
+    input.type = 'password';
+    input.style.display = 'block';
+  } else if (action === 'delete') {
     title.textContent = T.delete_title;
     desc.textContent = T.delete_password + ': ' + file;
     confirmBtn.textContent = T.delete_confirm;
     confirmBtn.className = 'modal-btn modal-btn-danger';
     input.placeholder = T.enter_password;
+    input.type = 'password';
+    input.style.display = 'block';
+  } else if (action === 'salt') {
+    title.textContent = T.salt || 'Salt';
+    desc.textContent = T.salt_desc || 'Enter password to view current Salt';
+    confirmBtn.textContent = T.confirm || 'Confirm';
+    confirmBtn.className = 'modal-btn modal-btn-primary';
+    input.placeholder = T.enter_password;
+    input.type = 'password';
+    input.style.display = 'block';
   }
   input.value = '';
   overlay.classList.add('active');
@@ -303,9 +343,10 @@ async function modalConfirm() {
     }
   } else if (currentAction === 'delete') {
     try {
-      const r = await fetch('/api/delete/' + encodeURIComponent(currentFile) + '?password=' + encodeURIComponent(password), {
-        method: 'DELETE',
-        headers: { 'X-Lang': LANG }
+      const r = await fetch('/api/delete/' + encodeURIComponent(currentFile), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Lang': LANG },
+        body: JSON.stringify({ password })
       });
       const data = await r.json();
       if (data.success) {
@@ -322,7 +363,76 @@ async function modalConfirm() {
       showToast(T.error, 'error');
       closeModal();
     }
+  } else if (currentAction === 'salt') {
+    try {
+      const r = await fetch('/api/salt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Lang': LANG },
+        body: JSON.stringify({ password })
+      });
+      const data = await r.json();
+      if (data.success && data.data) {
+        document.getElementById('modalInput').style.display = 'none';
+        document.getElementById('modalConfirm').style.display = 'none';
+        document.getElementById('modalCancel').style.display = 'none';
+        document.getElementById('modalDesc').textContent = T.salt || 'Salt';
+        const saltDisplay = document.getElementById('saltDisplay');
+        saltDisplay.textContent = data.data;
+        saltDisplay.style.display = 'block';
+        const copyBtn = document.getElementById('copySaltBtn');
+        copyBtn.textContent = T.copy || 'Copy to clipboard';
+        copyBtn.style.display = 'block';
+        copyBtn.onclick = () => copySalt(data.data, copyBtn);
+      } else {
+        errEl.textContent = data.message || T.invalid_password;
+        errEl.classList.add('show');
+        document.getElementById('modalInput').value = '';
+        document.getElementById('modalInput').focus();
+      }
+    } catch(e) {
+      showToast(T.error, 'error');
+      closeModal();
+    }
   }
+
+function copySalt(text, btn) {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast(T.copied || 'Copied!', 'success');
+      copySuccess(btn);
+    }).catch(() => {
+      fallbackCopy(text, btn);
+    });
+  } else {
+    fallbackCopy(text, btn);
+  }
+}
+
+function fallbackCopy(text, btn) {
+  const textArea = document.createElement('textarea');
+  textArea.value = text;
+  textArea.style.position = 'fixed';
+  textArea.style.left = '-9999px';
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  try {
+    document.execCommand('copy');
+    showToast(T.copied || 'Copied!', 'success');
+    copySuccess(btn);
+  } catch (err) {
+    showToast(T.copy_error || 'Copy failed', 'error');
+  }
+  document.body.removeChild(textArea);
+}
+
+function copySuccess(btn) {
+  if (!btn) return;
+  btn.textContent = T.copied || 'Copied!';
+  setTimeout(() => {
+    btn.textContent = T.copy || 'Copy to clipboard';
+  }, 2000);
+}
 }
 
 async function uploadFiles(files) {
@@ -352,7 +462,22 @@ async function uploadFiles(files) {
     if (data.success) {
       fill.style.width = '100%';
       setTimeout(() => bar.classList.remove('active'), 500);
-      showToast(data.message, 'success');
+      
+      if (data.data && data.data.length > 0) {
+        let msg = '';
+        data.data.forEach((item, index) => {
+          if (index > 0) msg += ', ';
+          if (item.original !== item.saved_as) {
+            msg += T.renamed || 'renamed';
+            msg += ': ' + item.original + ' -> ' + item.saved_as;
+          } else {
+            msg += item.saved_as;
+          }
+        });
+        showToast(msg, 'success');
+      } else {
+        showToast(data.message, 'success');
+      }
       updateFileList();
     } else {
       bar.classList.remove('active');
